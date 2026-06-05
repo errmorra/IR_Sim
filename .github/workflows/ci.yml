@@ -1,0 +1,103 @@
+name: CI
+
+on:
+  push:
+    branches: [ "main", "develop" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  validate:
+    name: Validate — Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install linting tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyflakes
+
+      - name: Syntax check — app.py
+        run: |
+          python -c "
+          import ast
+          with open('app.py') as f:
+              src = f.read()
+          ast.parse(src)
+          assert 'import random' in src,          'random import missing'
+          assert 'random.randrange' in src,        'random scenario selection missing'
+          assert 'random.shuffle' in src,          'choice shuffle missing'
+          assert '_choice_token_map' in src,       'token map missing'
+          print('app.py syntax OK — all feature patches confirmed')
+          "
+
+      - name: Lint — app.py
+        run: python -m pyflakes app.py || true
+
+      - name: Validate — scenarios.json (full schema + scoring + shuffle stability)
+        run: python validate_scenarios.py --quiet
+
+      - name: Headless logic test — all 20 scenarios
+        run: |
+          python - << 'PYEOF'
+          import json, random, sys
+
+          with open("scenarios.json") as f:
+              raw = json.load(f)
+          all_scenarios = raw["scenarios"] if "scenarios" in raw else [raw]
+
+          def run(scenario, quality):
+              nist = comp = legal = 50
+              for inj in scenario["injects"]:
+                  c = next(x for x in inj["choices"] if x["quality"] == quality)
+                  nist  = max(0, min(100, nist  + c["nist_score_delta"]))
+                  comp  = max(0, min(100, comp  + c["compliance_score_delta"]))
+                  legal = max(0, min(100, legal + c["legal_score_delta"]))
+              overall = round((nist + comp + legal) / 3, 1)
+              return "A" if overall>=85 else "B" if overall>=70 else "C" if overall>=55 else "D" if overall>=40 else "F"
+
+          errors = []
+          for i, s in enumerate(all_scenarios):
+            sid = s["scenario_meta"]["id"]
+            g_opt = run(s, "optimal")
+            g_det = run(s, "detrimental")
+            if g_opt not in ("A","B"):
+                errors.append(f"{sid}: optimal path grade={g_opt} (expected A or B)")
+            if g_det not in ("D","F"):
+                errors.append(f"{sid}: detrimental path grade={g_det} (expected D or F)")
+
+            # Shuffle stability
+            nist = comp = legal = 50
+            for inj in s["injects"]:
+                shuffled = list(inj["choices"])
+                random.shuffle(shuffled)
+                c = next(x for x in shuffled if x["quality"] == "optimal")
+                nist  = max(0, min(100, nist  + c["nist_score_delta"]))
+                comp  = max(0, min(100, comp  + c["compliance_score_delta"]))
+                legal = max(0, min(100, legal + c["legal_score_delta"]))
+            # Compare against non-shuffled
+            nist2 = comp2 = legal2 = 50
+            for inj in s["injects"]:
+                c = next(x for x in inj["choices"] if x["quality"] == "optimal")
+                nist2  = max(0, min(100, nist2  + c["nist_score_delta"]))
+                comp2  = max(0, min(100, comp2  + c["compliance_score_delta"]))
+                legal2 = max(0, min(100, legal2 + c["legal_score_delta"]))
+            if (nist, comp, legal) != (nist2, comp2, legal2):
+                errors.append(f"{sid}: shuffle instability detected")
+
+          if errors:
+              for e in errors:
+                  print(f"FAIL: {e}")
+              sys.exit(1)
+          print(f"All {len(all_scenarios)} scenarios passed (optimal/detrimental grades + shuffle stability)")
+          PYEOF

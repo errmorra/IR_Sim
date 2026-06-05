@@ -1,0 +1,61 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+
+# Virtual environments
+venv/
+env/
+.env/
+.venv/
+ENV/
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Generated GRC reports (user outputs — don't commit)
+IR_GRC_Report_*.md
+
+# OS artifacts
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.sublime-project
+*.sublime-workspace
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Scenario chunk files (build artifacts — only scenarios.json is needed)
+s2_s3.json
+s4_s5.json
+s6_s7.json
+s8_s9.json
+s10.json
+s11_s12.json
+s13.json
+s14.json
+s15.json
+s16.json
+s17.json
+s18.json
+s19.json
+s20.json
+scenarios_part1.json
