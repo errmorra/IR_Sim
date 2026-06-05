@@ -9,7 +9,6 @@ Dependencies: customtkinter, Pillow (optional)
 """
 
 import json
-import os
 import random
 import sys
 import tkinter as tk
@@ -131,6 +130,13 @@ class ScenarioManager:
         self.injects = scenario["injects"]
         self.meta    = scenario["scenario_meta"]
         self.phases  = scenario["nist_phases"]
+
+    def reselect(self):
+        """Pick a new random scenario, avoiding an immediate repeat when possible."""
+        if len(self._all_scenarios) > 1:
+            choices = [i for i in range(len(self._all_scenarios)) if i != self._scenario_index]
+            self._scenario_index = random.choice(choices)
+        self._mount(self._scenario_index)
 
     @property
     def total_scenarios(self) -> int:
@@ -324,14 +330,14 @@ class ReportGenerator:
             a(f"### {icon} Inject {i}: {decision['inject_title']}")
             a(f"**Phase:** {decision['phase']} | **Decision Quality:** {quality.upper()}")
             a("")
-            a(f"**Action Taken:**  ")
+            a("**Action Taken:**  ")
             a(f"> {decision['choice_text']}")
             a("")
-            a(f"**Assessment:**  ")
+            a("**Assessment:**  ")
             a(f"> {decision['feedback']}")
             a("")
             mitre = decision["mitre"]
-            a(f"**MITRE ATT&CK Context:**  ")
+            a("**MITRE ATT&CK Context:**  ")
             a(f"- Tactic: `{mitre['tactic']}` ({mitre['tactic_id']})")
             a(f"- Technique: `{mitre['technique']}` ({mitre['technique_id']})")
             a(f"- Technique Correctly Identified: {'Yes ✅' if decision['technique_identified'] else 'No ❌'}")
@@ -376,19 +382,16 @@ class ReportGenerator:
         a("---")
         a("")
 
-        # Regulatory Framework Obligations
+        # Regulatory Framework Obligations (tailored to scenario industry + techniques)
         a("## ⚖️ Regulatory & Legal Obligations Checklist")
+        a("")
+        a(f"Obligations below are scoped to the **{s.meta['industry']}** sector and the adversary "
+          f"techniques observed in this scenario. Confirm specifics with legal counsel.")
         a("")
         a("| Obligation | Regulatory Source | Status | Notes |")
         a("|------------|------------------|--------|-------|")
-        a("| PHI Breach Notification to HHS OCR | HIPAA §164.408 | Required within 60 days | File at ocrportal.hhs.gov |")
-        a("| Individual Patient Notification | HIPAA §164.404 | Required within 60 days | Written notice required |")
-        a("| Media Notification (if >500 affected in state) | HIPAA §164.406 | Likely Required | Contact local media |")
-        a("| FBI Cyber Division Notification | 18 U.S.C. § 1030 | Recommended | IC3.gov complaint |")
-        a("| CISA Incident Report | CIRCIA 2022 | Required if Critical Infrastructure | Report within 72 hours |")
-        a("| State AG Notification | State Breach Laws | Varies by state | Review all 50-state requirements |")
-        a("| Cyber Insurance Carrier Notification | Policy Terms | Required | Notify within policy window |")
-        a("| OFAC Sanctions Screening of Threat Actor | OFAC Regulations | Required before any payment | SDN list check |")
+        for ob in self._build_regulatory_obligations():
+            a(f"| {ob['obligation']} | {ob['source']} | {ob['status']} | {ob['notes']} |")
         a("")
         a("---")
         a("")
@@ -402,7 +405,7 @@ class ReportGenerator:
         a("")
         a(f"*Generated: {self.generated_at.strftime('%Y-%m-%d %H:%M:%S UTC')}*  ")
         a(f"*Scenario ID: {s.meta['id']}*  ")
-        a(f"*Framework References: NIST SP 800-61 r2 | MITRE ATT&CK Enterprise v14 | HIPAA Security Rule | NIST CSF 2.0*")
+        a("*Framework References: NIST SP 800-61 r2 | MITRE ATT&CK Enterprise v14 | NIST CSF 2.0*")
         a("")
 
         return "\n".join(lines)
@@ -469,7 +472,83 @@ class ReportGenerator:
                       "Target: >80% technique identification rate within 12 months.",
         })
 
+        # Surface recommendations that map to techniques actually seen in this run first.
+        encountered = {t.get("technique_id", "") for t in s.mitre_techniques}
+        encountered.discard("")
+
+        def relevance(rec):
+            return any(tid and tid in rec["detail"] for tid in encountered)
+
+        recs.sort(key=relevance, reverse=True)
         return recs
+
+    def _build_regulatory_obligations(self) -> list[dict]:
+        """Return a regulatory checklist scoped to the scenario industry and techniques.
+
+        Previously this section was hardcoded to healthcare/HIPAA for every scenario,
+        which produced inaccurate reports (e.g. PHI/HIPAA rows on a DeFi or DDoS run).
+        """
+        s = self.session
+        industry = (s.meta.get("industry", "") or "").lower()
+        technique_ids = " ".join(t.get("technique_id", "") for t in s.mitre_techniques)
+        obligations: list[dict] = []
+
+        def add(obligation, source, status, notes):
+            obligations.append({"obligation": obligation, "source": source,
+                                "status": status, "notes": notes})
+
+        # ---- Industry-specific notification obligations ----
+        if any(k in industry for k in ("health", "hospital", "pharma", "medical")):
+            add("PHI Breach Notification to HHS OCR", "HIPAA §164.408",
+                "Required within 60 days", "File at ocrportal.hhs.gov")
+            add("Individual Patient Notification", "HIPAA §164.404",
+                "Required within 60 days", "Written notice required")
+            add("Media Notification (if >500 affected in a state)", "HIPAA §164.406",
+                "Likely Required", "Notify prominent in-state media outlets")
+        if any(k in industry for k in ("bank", "financial", "insurance", "fintech", "crypto")):
+            add("Customer Notification & Safeguards Review", "GLBA Safeguards Rule (16 CFR 314)",
+                "Required", "Notify FTC for breaches affecting 500+ consumers")
+            add("Suspicious Activity Report (if fraud/funds movement)", "FinCEN SAR (31 CFR 1020.320)",
+                "Required if applicable", "File within 30 days of detection")
+            add("Material Cybersecurity Incident Disclosure", "SEC Cyber Disclosure Rule (2023)",
+                "Required if public company", "Form 8-K Item 1.05 within 4 business days")
+        if any(k in industry for k in ("commerce", "retail", "gaming", "saas", "media", "technology")):
+            add("Cardholder Data Breach Notification", "PCI DSS v4.0 / Card Brands",
+                "Required if CHD involved", "Notify acquirer & card brands immediately")
+            add("Customer / Data Subject Notification", "GDPR Art. 33-34 / CCPA-CPRA",
+                "Required if PII exposed", "GDPR: 72h to supervisory authority")
+        if any(k in industry for k in ("defense", "manufactur")):
+            add("DoD Cyber Incident Report", "DFARS 252.204-7012",
+                "Required if CDI/CUI involved", "Report to DIBNET within 72 hours")
+            add("CMMC Control Assessment", "CMMC Level 2",
+                "Review post-incident", "Update SSP/POA&M as needed")
+
+        # ---- Technique / threat-driven obligations ----
+        ransomware = ("T1486" in technique_ids or "T1490" in technique_ids
+                      or "ransom" in (s.meta.get("subtitle", "").lower()))
+        if ransomware:
+            add("OFAC Sanctions Screening Before Any Payment", "OFAC Advisory (2020/2021)",
+                "Required before payment", "Verify threat actor not on SDN list")
+        if any(tid in technique_ids for tid in ("T1567", "T1048", "T1041", "T1530")):
+            add("Data Exfiltration Breach Assessment", "State Breach Laws / GDPR",
+                "Required if PII/PHI exfiltrated", "Document data categories exposed")
+
+        # ---- Critical infrastructure ----
+        if "infrastructure" in industry:
+            add("CISA Cyber Incident Report", "CIRCIA 2022",
+                "Required for covered entities", "Report within 72 hours of determination")
+
+        # ---- Always-applicable baseline obligations ----
+        add("Law Enforcement Notification", "18 U.S.C. § 1030",
+            "Recommended", "File complaint at IC3.gov / contact FBI field office")
+        add("State Attorney General Notification", "State Breach Notification Laws",
+            "Varies by state", "Review all applicable U.S. state requirements")
+        add("Cyber Insurance Carrier Notification", "Policy Terms",
+            "Required", "Notify within the policy-defined window to preserve coverage")
+        add("Preserve Forensic Evidence & Litigation Hold", "FRCP / Legal Counsel",
+            "Required", "Maintain chain of custody for potential litigation")
+
+        return obligations
 
 
 # ---------------------------------------------------------------------------
@@ -491,6 +570,7 @@ class IncidentSimulatorApp(tk.Tk):
         self._selected_choice = tk.StringVar(value="")
         self._feedback_visible = False
         self._sim_complete = False
+        self._content_wraplength = 700
 
         self._configure_window()
         self._build_ui()
@@ -528,6 +608,42 @@ class IncidentSimulatorApp(tk.Tk):
         self._build_main_panel(main)
         self._build_sidebar(main)
         self._build_status_bar()
+        self._bind_shortcuts()
+
+    def _bind_shortcuts(self):
+        """Keyboard navigation: 1-4 / A-D pick a response, Enter commits/advances."""
+        for i, key in enumerate(("1", "2", "3", "4")):
+            self.bind(key, lambda e, idx=i: self._select_choice_by_index(idx))
+        for i, key in enumerate(("a", "b", "c", "d")):
+            self.bind(key, lambda e, idx=i: self._select_choice_by_index(idx))
+            self.bind(key.upper(), lambda e, idx=i: self._select_choice_by_index(idx))
+        self.bind("<Return>", self._on_enter)
+        self.bind("<KP_Enter>", self._on_enter)
+
+    def _select_choice_by_index(self, idx: int):
+        if self._sim_complete:
+            return
+        if self._feedback_visible:
+            return
+        if 0 <= idx < len(getattr(self, "_display_tokens", [])):
+            self._selected_choice.set(self._display_tokens[idx])
+
+    def _on_enter(self, _event=None):
+        if self._sim_complete:
+            return
+        if self._feedback_visible:
+            self._next_btn.invoke()
+        elif str(self._submit_btn["state"]) != "disabled":
+            self._on_submit()
+
+    # Compact labels for the header phase tracker so long names never clip.
+    PHASE_SHORT_LABELS = [
+        "PREP",
+        "DETECT",
+        "CONTAIN",
+        "ERADICATE",
+        "POST",
+    ]
 
     def _build_header(self):
         hdr = tk.Frame(self, bg=COLORS["bg_card"], height=72)
@@ -543,34 +659,38 @@ class IncidentSimulatorApp(tk.Tk):
                  fg=COLORS["accent_cyan"], bg=COLORS["bg_card"]).pack(anchor="w")
         n = self.scenario_mgr._scenario_index + 1
         t = self.scenario_mgr.total_scenarios
-        tk.Label(left,
+        self._header_subtitle = tk.Label(left,
                  text=f"SCENARIO {n}/{t} [RANDOM]: {self.scenario_mgr.meta['title'].upper()}  //  {self.scenario_mgr.meta['threat_actor']}",
                  font=FONTS["mono_sm"],
-                 fg=COLORS["text_secondary"], bg=COLORS["bg_card"]).pack(anchor="w")
+                 fg=COLORS["text_secondary"], bg=COLORS["bg_card"])
+        self._header_subtitle.pack(anchor="w")
 
-        # Right — phase tracker
+        # Right — phase tracker (compact labels prevent clipping at the edge)
         right = tk.Frame(hdr, bg=COLORS["bg_card"])
         right.pack(side="right", padx=20, pady=14)
 
         self._phase_dots = []
         for i, phase in enumerate(self.scenario_mgr.phases):
             dot_frame = tk.Frame(right, bg=COLORS["bg_card"])
-            dot_frame.pack(side="left", padx=6)
-            dot = tk.Label(dot_frame, text="●", font=("Courier New", 14),
+            dot_frame.pack(side="left", padx=5)
+            dot = tk.Label(dot_frame, text="●", font=("Courier New", 13),
                            fg=COLORS["text_dim"], bg=COLORS["bg_card"])
             dot.pack()
-            name = tk.Label(dot_frame, text=phase.replace(" & ", "\n& "),
-                            font=FONTS["mono_sm"], justify="center",
+            short = self.PHASE_SHORT_LABELS[i] if i < len(self.PHASE_SHORT_LABELS) else phase
+            name = tk.Label(dot_frame, text=short,
+                            font=FONTS["tag"], justify="center",
                             fg=COLORS["text_dim"], bg=COLORS["bg_card"])
             name.pack()
             self._phase_dots.append((dot, name))
             if i < len(self.scenario_mgr.phases) - 1:
-                tk.Label(right, text="──", font=FONTS["mono"],
-                         fg=COLORS["text_dim"], bg=COLORS["bg_card"]).pack(side="left", padx=2)
+                tk.Label(right, text="─", font=FONTS["mono"],
+                         fg=COLORS["text_dim"], bg=COLORS["bg_card"]).pack(side="left", padx=1)
 
     def _build_main_panel(self, parent):
         panel = tk.Frame(parent, bg=COLORS["bg_primary"])
         panel.grid(row=0, column=0, sticky="nsew", padx=(0, 6), pady=8)
+        self._main_panel = panel
+        panel.bind("<Configure>", self._on_panel_resize)
         panel.rowconfigure(0, weight=0)  # inject header
         panel.rowconfigure(1, weight=1)  # story text
         panel.rowconfigure(2, weight=0)  # MITRE badge
@@ -605,7 +725,14 @@ class IncidentSimulatorApp(tk.Tk):
             font=FONTS["header"],
             fg=COLORS["text_primary"], bg=COLORS["bg_card"],
             anchor="w")
-        self._inject_title_label.pack(fill="x", pady=(4, 0))
+        self._inject_title_label.pack(fill="x", pady=(4, 6))
+
+        # Thin progress bar showing how far through the scenario the player is
+        prog_bg = tk.Frame(ih_inner, bg=COLORS["bg_input"], height=4)
+        prog_bg.pack(fill="x")
+        prog_bg.pack_propagate(False)
+        self._progress_fill = tk.Frame(prog_bg, bg=COLORS["accent_cyan"], height=4)
+        self._progress_fill.place(x=0, y=0, relheight=1.0, relwidth=0.0)
 
         # ── Story text area
         story_outer = self._make_card(panel)
@@ -649,7 +776,7 @@ class IncidentSimulatorApp(tk.Tk):
         choice_outer.grid(row=3, column=0, sticky="ew", pady=(0, 6))
 
         choice_label = tk.Label(choice_outer,
-            text="SELECT RESPONSE ACTION:",
+            text="SELECT RESPONSE ACTION:   [ keys 1-3 or A-C select  ·  Enter commits ]",
             font=FONTS["tag"],
             fg=COLORS["accent_cyan"], bg=COLORS["bg_card"])
         choice_label.pack(anchor="w", padx=16, pady=(10, 4))
@@ -784,6 +911,15 @@ class IncidentSimulatorApp(tk.Tk):
         self._report_btn.pack(fill="x", pady=(6, 0))
         self._report_btn.configure(state="disabled")
 
+        # ── New scenario button — replay without relaunching the app
+        self._new_btn = self._make_button(sidebar,
+            text="↻  NEW SCENARIO",
+            command=self._on_new_scenario,
+            fg=COLORS["text_primary"],
+            bg=COLORS["bg_elevated"],
+            active_bg=COLORS["border"])
+        self._new_btn.pack(fill="x", pady=(6, 0))
+
     def _build_score_meter(self, parent, label: str, attr: str, color: str):
         """Build a labeled progress bar for a score metric."""
         frame = tk.Frame(parent, bg=COLORS["bg_card"])
@@ -844,6 +980,19 @@ class IncidentSimulatorApp(tk.Tk):
             cursor="hand2",
         )
 
+    def _on_panel_resize(self, event):
+        """Reflow wrapped text so it adapts to the current window width."""
+        # Card inner padding is ~16px on each side; leave a small safety margin.
+        wrap = max(320, event.width - 48)
+        self._content_wraplength = wrap
+        for widget in (getattr(self, "_mitre_badge_label", None),
+                       getattr(self, "_feedback_text", None)):
+            if widget is not None and widget.winfo_exists():
+                widget.configure(wraplength=wrap)
+        for rb in getattr(self, "_choice_buttons", []):
+            if rb.winfo_exists():
+                rb.configure(wraplength=wrap - 24)
+
     # ----------------------------------------------------------- inject loader
 
     def _load_inject(self, index: int):
@@ -867,6 +1016,8 @@ class IncidentSimulatorApp(tk.Tk):
         self._inject_num_label.configure(
             text=f"INJECT {index+1:02d}/{self.scenario_mgr.total_injects:02d}")
         self._inject_title_label.configure(text=inject["title"])
+        total = self.scenario_mgr.total_injects
+        self._progress_fill.place_configure(relwidth=(index + 1) / total if total else 0)
         self._phase_badge.configure(
             text=f"[ {inject['phase'].upper()} ]",
             fg=phase_color)
@@ -900,11 +1051,13 @@ class IncidentSimulatorApp(tk.Tk):
         random.shuffle(display_choices)
         display_labels  = ["A", "B", "C", "D"]
         self._choice_token_map = {}          # token → original choice dict
+        self._display_tokens = []            # display order → token (for shortcuts)
 
         for display_idx, choice in enumerate(display_choices):
             letter = display_labels[display_idx]
             token  = f"{index}_{letter}"     # unique per inject render
             self._choice_token_map[token] = choice
+            self._display_tokens.append(token)
 
             btn_frame = tk.Frame(self._choice_buttons_frame, bg=COLORS["bg_card"])
             btn_frame.pack(fill="x", pady=3)
@@ -921,7 +1074,7 @@ class IncidentSimulatorApp(tk.Tk):
                 activeforeground=COLORS["accent_cyan"],
                 selectcolor=COLORS["bg_elevated"],
                 indicatoron=True,
-                wraplength=690,
+                wraplength=self._content_wraplength - 24,
                 justify="left",
                 anchor="w",
                 relief="flat",
@@ -930,6 +1083,8 @@ class IncidentSimulatorApp(tk.Tk):
                 cursor="hand2",
             )
             rb.pack(fill="x")
+            rb.bind("<Enter>", lambda e, b=rb: b.configure(fg=COLORS["accent_cyan"]))
+            rb.bind("<Leave>", lambda e, b=rb: b.configure(fg=COLORS["text_primary"]))
             self._choice_buttons.append(rb)
 
         # ── Hide feedback
@@ -963,6 +1118,7 @@ class IncidentSimulatorApp(tk.Tk):
         # Show feedback
         style = QUALITY_STYLES[choice["quality"]]
         self._feedback_frame.grid()
+        self._feedback_visible = True
         self._feedback_quality_label.configure(
             text=style["icon"],
             fg=style["color"])
@@ -987,6 +1143,25 @@ class IncidentSimulatorApp(tk.Tk):
     def _on_finish(self):
         self._sim_complete = True
         self._show_final_screen()
+
+    def _on_new_scenario(self):
+        """Restart with a freshly selected random scenario, in-place."""
+        if not self._sim_complete and len(self.session.decision_log) > 0:
+            if not messagebox.askyesno(
+                "Start New Scenario?",
+                "This will abandon your current run and load a new random scenario. "
+                "Continue?"):
+                return
+        self.scenario_mgr.reselect()
+        self.session = SimulationSession(self.scenario_mgr.meta, self.scenario_mgr.phases)
+        self._selected_choice = tk.StringVar(value="")
+        self._feedback_visible = False
+        self._sim_complete = False
+        for w in self.winfo_children():
+            w.destroy()
+        self._configure_window()
+        self._build_ui()
+        self._load_inject(0)
 
     def _show_final_screen(self):
         grade, grade_color = self.session.grade()
