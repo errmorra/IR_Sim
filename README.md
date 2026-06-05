@@ -58,6 +58,9 @@ No database, no API keys, no server, no Docker.
 | 5 | Read the GRC feedback with regulatory citations |
 | 6 | Monitor live scores and MITRE tracker in the sidebar |
 | 7 | At the end, click **GENERATE GRC REPORT** to export your Markdown compliance report |
+| 8 | Click **↻ NEW SCENARIO** any time to load a fresh random scenario without restarting |
+
+**Keyboard shortcuts:** press `1`–`3` (or `A`–`C`) to select a response, and `Enter` to commit your decision / advance to the next inject.
 
 Each launch picks a different scenario at random — play through all 20 for full coverage.
 

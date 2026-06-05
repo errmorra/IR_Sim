@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [3.1.0] — 2024
+
+### Added
+- **Keyboard navigation** — press `1`–`3` (or `A`–`C`) to select a response and `Enter`
+  to commit / advance to the next inject without reaching for the mouse
+- **In-app replay** — a new sidebar **↻ NEW SCENARIO** button loads a fresh random scenario
+  without relaunching the app (avoids repeating the current scenario when possible)
+- **Inject progress bar** — a thin cyan bar in the inject header shows how far through the
+  scenario the player is
+- **Choice hover highlighting** — response options highlight on mouse-over for clearer affordance
+
+### Changed
+- **Scenario-aware regulatory checklist** — the exported GRC report's *Regulatory & Legal
+  Obligations* section is now tailored to the scenario's industry and the MITRE techniques
+  encountered (e.g. GLBA/FinCEN/SEC for financial scenarios, DFARS/CMMC for defense), instead
+  of always emitting healthcare/HIPAA obligations regardless of scenario
+- **Responsive text reflow** — story, MITRE badge, choice, and feedback text now re-wrap to the
+  current window width on resize instead of using fixed wrap widths
+- **Header phase tracker** — compact phase labels (PREP / DETECT / CONTAIN / ERADICATE / POST)
+  prevent the last phase name from being clipped at the window edge
+- Executive recommendations in the report are now ordered so those mapping to techniques actually
+  seen in the run appear first
+
+### Fixed
+- Removed unused `os` import and f-strings without placeholders (clean `pyflakes` run)
+- Guarded the resize handler against widgets destroyed during scenario restart
+
+---
+
 ## [2.0.0] — 2024
 
 ### Added
