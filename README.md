@@ -36,12 +36,11 @@
 git clone https://github.com/errmorra/IR_Sim.git
 cd IR_Sim
 
-# 2. Optional: install customtkinter for enhanced widget styling
-pip install customtkinter
-
-# 3. Run — a random scenario is selected automatically
+# 2. Run — a random scenario is selected automatically (no pip installs needed)
 python app.py
 ```
+
+> On Debian/Ubuntu, install tkinter first if missing: `sudo apt install python3-tk`
 
 No database, no API keys, no server, no Docker.
 
@@ -56,9 +55,9 @@ No database, no API keys, no server, no Docker.
 | 3 | Select a response action — order is randomized each time |
 | 4 | Click **COMMIT DECISION** |
 | 5 | Read the GRC feedback with regulatory citations |
-| 6 | Monitor live scores and MITRE tracker in the sidebar |
-| 7 | At the end, click **GENERATE GRC REPORT** to export your Markdown compliance report |
-| 8 | Click **↻ NEW SCENARIO** any time to load a fresh random scenario without restarting |
+| 6 | Monitor live scores, the MITRE tracker, and the exercise timer |
+| 7 | At the end, click **GENERATE GRC REPORT** to preview the report in-app and save it as Markdown |
+| 8 | Click **↻ RANDOM** for a fresh random scenario, or **▤ CHOOSE…** to pick a specific one |
 
 **Keyboard shortcuts:** press `1`–`3` (or `A`–`C`) to select a response, and `Enter` to commit your decision / advance to the next inject.
 

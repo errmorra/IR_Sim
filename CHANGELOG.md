@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [3.2.0] — 2026
+
+### Added
+- **In-app GRC report preview** — *Generate GRC Report* now opens a dark-themed preview window
+  with the full Markdown report and **Save As…** / **Close** actions, instead of only writing a file
+- **Scenario chooser** — new **▤ CHOOSE…** sidebar button opens a picker listing all scenarios
+  (severity, title, theme, industry) so trainers can run a specific scenario; double-click,
+  `Enter`, or **Load Scenario** to start it
+- **Decision score impact chips** — the feedback panel now shows the committed choice's
+  per-axis deltas (`NIST +20 · COMPLIANCE -8 · LEGAL -10`), color-coded by direction
+- **Feedback quality tinting** — the feedback card background and border now tint
+  green/yellow/red to match decision quality (the `QUALITY_STYLES` tints existed but were unused)
+- **Live exercise timer** in the status bar; freezes at completion and matches the duration
+  recorded in the exported report
+- **Exit confirmation** when closing the window mid-exercise
+
+### Changed
+- Sidebar replay control split into **↻ RANDOM** and **▤ CHOOSE…** buttons
+- Status bar version/scenario count now derive from `APP_VERSION` and the loaded scenario file
+  instead of hardcoded strings
+
+### Removed
+- Dead `customtkinter` import block — the app is pure stdlib tkinter and the optional dependency
+  had no effect; `requirements.txt`, `setup.py`, and README updated accordingly
+
+### Fixed
+- MITRE tracker "◇ Missed" status label was clipped to "Misse" (label width too narrow)
+
+---
+
 ## [3.1.0] — 2024
 
 ### Added
