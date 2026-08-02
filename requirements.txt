@@ -1,7 +1,4 @@
-# IR_Sim v2 — Dependencies
+# IR_Sim — Dependencies
 # =========================================
-# tkinter is included in the Python standard library (no pip install needed).
-# customtkinter is optional — the app falls back to clean stdlib tkinter styling.
-
-# Optional: modern dark-themed widgets
-customtkinter>=5.2.0
+# None! The app uses only the Python standard library.
+# tkinter ships with CPython (on Debian/Ubuntu: sudo apt install python3-tk).
