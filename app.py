@@ -5,7 +5,7 @@ A modern GUI application for cybersecurity GRC training, mapping attacker
 behaviors to the MITRE ATT&CK framework and NIST SP 800-61 r2 lifecycle.
 
 Author: Portfolio Project — Cybersecurity GRC Professional
-Dependencies: customtkinter, Pillow (optional)
+Dependencies: Python standard library only (tkinter)
 """
 
 import json
@@ -16,16 +16,7 @@ from tkinter import messagebox, filedialog
 from datetime import datetime
 from pathlib import Path
 
-# ---------------------------------------------------------------------------
-# Dependency handling — graceful fallback to standard tkinter if needed
-# ---------------------------------------------------------------------------
-try:
-    import customtkinter as ctk
-    CTK_AVAILABLE = True
-    ctk.set_appearance_mode("dark")
-    ctk.set_default_color_theme("dark-blue")
-except ImportError:
-    CTK_AVAILABLE = False
+APP_VERSION = "3.2.0"
 
 # ---------------------------------------------------------------------------
 # Design System Constants
@@ -137,6 +128,15 @@ class ScenarioManager:
             choices = [i for i in range(len(self._all_scenarios)) if i != self._scenario_index]
             self._scenario_index = random.choice(choices)
         self._mount(self._scenario_index)
+
+    def select(self, index: int):
+        """Mount a specific scenario by index (used by the scenario chooser)."""
+        self._scenario_index = index
+        self._mount(index)
+
+    def all_meta(self) -> list:
+        """Metadata for every scenario, for listing in the chooser dialog."""
+        return [s["scenario_meta"] for s in self._all_scenarios]
 
     @property
     def total_scenarios(self) -> int:
@@ -571,10 +571,12 @@ class IncidentSimulatorApp(tk.Tk):
         self._feedback_visible = False
         self._sim_complete = False
         self._content_wraplength = 700
+        self._timer_job = None
 
         self._configure_window()
         self._build_ui()
         self._load_inject(0)
+        self.protocol("WM_DELETE_WINDOW", self._on_close)
 
     # ------------------------------------------------------------------ setup
 
@@ -803,10 +805,22 @@ class IncidentSimulatorApp(tk.Tk):
         self._feedback_inner = tk.Frame(self._feedback_frame, bg=COLORS["bg_card"])
         self._feedback_inner.pack(fill="x", padx=16, pady=10)
 
-        self._feedback_quality_label = tk.Label(self._feedback_inner, text="",
+        quality_row = tk.Frame(self._feedback_inner, bg=COLORS["bg_card"])
+        quality_row.pack(fill="x")
+        self._feedback_quality_row = quality_row
+
+        self._feedback_quality_label = tk.Label(quality_row, text="",
                                                 font=FONTS["subheader"],
                                                 bg=COLORS["bg_card"])
-        self._feedback_quality_label.pack(anchor="w")
+        self._feedback_quality_label.pack(side="left")
+
+        # Per-axis score impact of the committed decision (e.g. "NIST +20")
+        self._feedback_delta_labels: list[tk.Label] = []
+        for _ in range(3):
+            lbl = tk.Label(quality_row, text="", font=FONTS["tag"],
+                           bg=COLORS["bg_card"])
+            lbl.pack(side="right", padx=(10, 0))
+            self._feedback_delta_labels.append(lbl)
 
         self._feedback_text = tk.Label(self._feedback_inner, text="",
                                        font=FONTS["body_sm"],
@@ -911,14 +925,27 @@ class IncidentSimulatorApp(tk.Tk):
         self._report_btn.pack(fill="x", pady=(6, 0))
         self._report_btn.configure(state="disabled")
 
-        # ── New scenario button — replay without relaunching the app
-        self._new_btn = self._make_button(sidebar,
-            text="↻  NEW SCENARIO",
+        # ── Replay buttons — random or hand-picked scenario, no relaunch needed
+        replay_row = tk.Frame(sidebar, bg=COLORS["bg_primary"])
+        replay_row.pack(fill="x", pady=(6, 0))
+        replay_row.columnconfigure(0, weight=1)
+        replay_row.columnconfigure(1, weight=1)
+
+        self._new_btn = self._make_button(replay_row,
+            text="↻  RANDOM",
             command=self._on_new_scenario,
             fg=COLORS["text_primary"],
             bg=COLORS["bg_elevated"],
             active_bg=COLORS["border"])
-        self._new_btn.pack(fill="x", pady=(6, 0))
+        self._new_btn.grid(row=0, column=0, sticky="ew", padx=(0, 3))
+
+        self._choose_btn = self._make_button(replay_row,
+            text="▤  CHOOSE…",
+            command=self._on_choose_scenario,
+            fg=COLORS["text_primary"],
+            bg=COLORS["bg_elevated"],
+            active_bg=COLORS["border"])
+        self._choose_btn.grid(row=0, column=1, sticky="ew", padx=(3, 0))
 
     def _build_score_meter(self, parent, label: str, attr: str, color: str):
         """Build a labeled progress bar for a score metric."""
@@ -954,9 +981,42 @@ class IncidentSimulatorApp(tk.Tk):
             fg=COLORS["text_dim"], bg=COLORS["bg_secondary"])
         self._status_label.pack(side="left", padx=10)
 
-        tk.Label(bar, text="IR_Sim v3.0  //  GRC Portfolio Edition  //  20 Scenarios",
+        tk.Label(bar,
+                 text=f"IR_Sim v{APP_VERSION}  //  GRC Portfolio Edition  //  "
+                      f"{self.scenario_mgr.total_scenarios} Scenarios",
                  font=FONTS["mono_sm"],
                  fg=COLORS["text_dim"], bg=COLORS["bg_secondary"]).pack(side="right", padx=10)
+
+        # Live exercise timer — the report records duration, now the player sees it too
+        self._timer_label = tk.Label(bar, text="⏱ 00:00",
+                                     font=FONTS["mono_sm"],
+                                     fg=COLORS["text_secondary"], bg=COLORS["bg_secondary"])
+        self._timer_label.pack(side="right", padx=10)
+        self._tick_timer()
+
+    def _tick_timer(self):
+        elapsed = datetime.now() - self.session.start_time
+        total_seconds = int(elapsed.total_seconds())
+        hours, rem = divmod(total_seconds, 3600)
+        minutes, seconds = divmod(rem, 60)
+        text = (f"⏱ {hours}:{minutes:02d}:{seconds:02d}" if hours
+                else f"⏱ {minutes:02d}:{seconds:02d}")
+        if self._timer_label.winfo_exists():
+            self._timer_label.configure(text=text)
+        # Freeze the clock once the exercise is complete
+        if not self._sim_complete:
+            self._timer_job = self.after(1000, self._tick_timer)
+        else:
+            self._timer_job = None
+
+    def _on_close(self):
+        """Warn before closing mid-run so progress isn't lost by accident."""
+        if not self._sim_complete and self.session.decision_log:
+            if not messagebox.askyesno(
+                "Exit IR_Sim?",
+                "An exercise is in progress. Quit and lose this run's progress?"):
+                return
+        self.destroy()
 
     # ----------------------------------------------------------- widget helpers
 
@@ -1115,14 +1175,30 @@ class IncidentSimulatorApp(tk.Tk):
         # Apply to session
         self.session.apply_decision(inject, choice)
 
-        # Show feedback
+        # Show feedback — card tinted by decision quality (QUALITY_STYLES bg)
         style = QUALITY_STYLES[choice["quality"]]
+        tint = style["bg"]
         self._feedback_frame.grid()
         self._feedback_visible = True
+        self._feedback_frame.configure(bg=tint, highlightbackground=style["color"])
+        for w in (self._feedback_inner, self._feedback_quality_row):
+            w.configure(bg=tint)
         self._feedback_quality_label.configure(
             text=style["icon"],
-            fg=style["color"])
-        self._feedback_text.configure(text=choice["feedback"])
+            fg=style["color"], bg=tint)
+        self._feedback_text.configure(text=choice["feedback"], bg=tint)
+
+        # Per-axis score impact, colored by direction
+        deltas = [
+            ("LEGAL",      choice["legal_score_delta"]),
+            ("COMPLIANCE", choice["compliance_score_delta"]),
+            ("NIST",       choice["nist_score_delta"]),
+        ]
+        for lbl, (name, d) in zip(self._feedback_delta_labels, deltas):
+            color = (COLORS["accent_green"] if d > 0
+                     else COLORS["accent_red"] if d < 0
+                     else COLORS["text_secondary"])
+            lbl.configure(text=f"{name} {d:+d}", fg=color, bg=tint)
 
         is_last = (inject_idx == self.scenario_mgr.total_injects - 1)
         if is_last:
@@ -1144,15 +1220,19 @@ class IncidentSimulatorApp(tk.Tk):
         self._sim_complete = True
         self._show_final_screen()
 
-    def _on_new_scenario(self):
-        """Restart with a freshly selected random scenario, in-place."""
-        if not self._sim_complete and len(self.session.decision_log) > 0:
-            if not messagebox.askyesno(
-                "Start New Scenario?",
-                "This will abandon your current run and load a new random scenario. "
-                "Continue?"):
-                return
-        self.scenario_mgr.reselect()
+    def _confirm_abandon_run(self) -> bool:
+        """True if there is no in-progress run, or the user agrees to abandon it."""
+        if self._sim_complete or not self.session.decision_log:
+            return True
+        return messagebox.askyesno(
+            "Start New Scenario?",
+            "This will abandon your current run and load a new scenario. Continue?")
+
+    def _restart_simulation(self):
+        """Reset session state and rebuild the UI for the currently mounted scenario."""
+        if self._timer_job is not None:
+            self.after_cancel(self._timer_job)
+            self._timer_job = None
         self.session = SimulationSession(self.scenario_mgr.meta, self.scenario_mgr.phases)
         self._selected_choice = tk.StringVar(value="")
         self._feedback_visible = False
@@ -1162,6 +1242,73 @@ class IncidentSimulatorApp(tk.Tk):
         self._configure_window()
         self._build_ui()
         self._load_inject(0)
+
+    def _on_new_scenario(self):
+        """Restart with a freshly selected random scenario, in-place."""
+        if not self._confirm_abandon_run():
+            return
+        self.scenario_mgr.reselect()
+        self._restart_simulation()
+
+    def _on_choose_scenario(self):
+        """Open a picker dialog listing all scenarios for targeted training."""
+        dialog = tk.Toplevel(self)
+        dialog.title("Choose Scenario")
+        dialog.geometry("760x520")
+        dialog.configure(bg=COLORS["bg_primary"])
+        dialog.transient(self)
+        dialog.grab_set()
+
+        tk.Label(dialog, text="SELECT A TRAINING SCENARIO",
+                 font=FONTS["subheader"], fg=COLORS["accent_cyan"],
+                 bg=COLORS["bg_primary"]).pack(anchor="w", padx=16, pady=(14, 6))
+
+        body = tk.Frame(dialog, bg=COLORS["bg_primary"])
+        body.pack(fill="both", expand=True, padx=16, pady=(0, 8))
+
+        listbox = tk.Listbox(body, font=FONTS["mono"],
+                             fg=COLORS["text_primary"], bg=COLORS["bg_input"],
+                             selectbackground=COLORS["bg_elevated"],
+                             selectforeground=COLORS["accent_cyan"],
+                             relief="flat", bd=0, highlightthickness=1,
+                             highlightbackground=COLORS["border"],
+                             activestyle="none")
+        scroll = tk.Scrollbar(body, command=listbox.yview,
+                              bg=COLORS["bg_card"], troughcolor=COLORS["bg_input"])
+        listbox.configure(yscrollcommand=scroll.set)
+        scroll.pack(side="right", fill="y")
+        listbox.pack(fill="both", expand=True)
+
+        for i, meta in enumerate(self.scenario_mgr.all_meta()):
+            listbox.insert("end",
+                f" {i+1:02d}  [{meta['severity']:<8}] {meta['title']}  —  "
+                f"{meta['subtitle']}  ({meta['industry']})")
+        listbox.selection_set(self.scenario_mgr._scenario_index)
+        listbox.see(self.scenario_mgr._scenario_index)
+
+        def load_selected(_event=None):
+            selection = listbox.curselection()
+            if not selection:
+                return
+            dialog.destroy()
+            if not self._confirm_abandon_run():
+                return
+            self.scenario_mgr.select(selection[0])
+            self._restart_simulation()
+
+        listbox.bind("<Double-Button-1>", load_selected)
+        listbox.bind("<Return>", load_selected)
+
+        btn_row = tk.Frame(dialog, bg=COLORS["bg_primary"])
+        btn_row.pack(fill="x", padx=16, pady=(0, 14))
+        self._make_button(btn_row, text="CANCEL",
+            command=dialog.destroy,
+            fg=COLORS["text_primary"], bg=COLORS["bg_elevated"],
+            active_bg=COLORS["border"]).pack(side="right", padx=(6, 0))
+        self._make_button(btn_row, text="▶  LOAD SCENARIO",
+            command=load_selected,
+            fg=COLORS["bg_primary"], bg=COLORS["accent_cyan"],
+            active_bg=COLORS["accent_blue"]).pack(side="right")
 
     def _show_final_screen(self):
         grade, grade_color = self.session.grade()
@@ -1219,12 +1366,52 @@ class IncidentSimulatorApp(tk.Tk):
             name.configure(fg=PHASE_COLORS[i])
 
     def _on_generate_report(self):
-        gen = ReportGenerator(self.session)
-        report_md = gen.generate()
+        """Generate the GRC report and show it in an in-app preview window."""
+        report_md = ReportGenerator(self.session).generate()
 
-        # Ask where to save
-        default_name = f"IR_GRC_Report_{self.session.meta['id']}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
+        preview = tk.Toplevel(self)
+        preview.title(f"GRC Report Preview — {self.session.meta['title']}")
+        preview.geometry("900x700")
+        preview.configure(bg=COLORS["bg_primary"])
+        preview.transient(self)
+
+        toolbar = tk.Frame(preview, bg=COLORS["bg_card"])
+        toolbar.pack(fill="x")
+        tk.Label(toolbar, text="📄 POST-INCIDENT GRC COMPLIANCE REPORT",
+                 font=FONTS["subheader"], fg=COLORS["accent_purple"],
+                 bg=COLORS["bg_card"]).pack(side="left", padx=14, pady=8)
+
+        self._make_button(toolbar, text="CLOSE",
+            command=preview.destroy,
+            fg=COLORS["text_primary"], bg=COLORS["bg_elevated"],
+            active_bg=COLORS["border"]).pack(side="right", padx=(4, 14), pady=6)
+        self._make_button(toolbar, text="💾  SAVE AS…",
+            command=lambda: self._save_report(report_md, preview),
+            fg=COLORS["bg_primary"], bg=COLORS["accent_cyan"],
+            active_bg=COLORS["accent_blue"]).pack(side="right", padx=4, pady=6)
+
+        body = tk.Frame(preview, bg=COLORS["bg_primary"])
+        body.pack(fill="both", expand=True, padx=10, pady=10)
+
+        text = tk.Text(body, wrap="word", font=FONTS["body_sm"],
+                       fg=COLORS["text_primary"], bg=COLORS["bg_input"],
+                       insertbackground=COLORS["accent_cyan"],
+                       selectbackground=COLORS["bg_elevated"],
+                       relief="flat", bd=0, padx=16, pady=12)
+        scroll = tk.Scrollbar(body, command=text.yview,
+                              bg=COLORS["bg_card"], troughcolor=COLORS["bg_input"])
+        text.configure(yscrollcommand=scroll.set)
+        scroll.pack(side="right", fill="y")
+        text.pack(fill="both", expand=True)
+
+        text.insert("1.0", report_md)
+        text.configure(state="disabled")
+
+    def _save_report(self, report_md: str, parent=None):
+        default_name = (f"IR_GRC_Report_{self.session.meta['id']}_"
+                        f"{datetime.now().strftime('%Y%m%d_%H%M%S')}.md")
         save_path = filedialog.asksaveasfilename(
+            parent=parent or self,
             defaultextension=".md",
             filetypes=[("Markdown files", "*.md"), ("All files", "*.*")],
             initialfile=default_name,
@@ -1237,11 +1424,12 @@ class IncidentSimulatorApp(tk.Tk):
             f.write(report_md)
 
         messagebox.showinfo(
-            "Report Generated",
+            "Report Saved",
             f"✅ GRC Compliance Report saved successfully!\n\n"
             f"Location: {save_path}\n\n"
             f"Open the .md file in VS Code, Typora, or any Markdown viewer\n"
-            f"for the formatted post-incident compliance report."
+            f"for the formatted post-incident compliance report.",
+            parent=parent or self,
         )
 
     # ------------------------------------------------------- score updaters
@@ -1272,7 +1460,7 @@ class IncidentSimulatorApp(tk.Tk):
 
             tk.Label(row, text=status_icon,
                      font=FONTS["mono_sm"], fg=status_color,
-                     bg=COLORS["bg_card"], width=7, anchor="w").pack(side="left")
+                     bg=COLORS["bg_card"], width=9, anchor="w").pack(side="left")
 
             details = tk.Frame(row, bg=COLORS["bg_card"])
             details.pack(side="left", fill="x", expand=True)
