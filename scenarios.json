@@ -8,7 +8,14 @@
         "threat_actor": "APT-SHADOW (Financially Motivated)",
         "industry": "Healthcare",
         "severity": "CRITICAL",
-        "estimated_impact": "$4.2M"
+        "estimated_impact": "$4.2M",
+        "objectives": [
+          "Blunt the Medicare-themed spear-phishing campaign before it lands.",
+          "Contain compromised credentials without destroying evidence.",
+          "Make a defensible ransom decision with the CEO and counsel.",
+          "Leave no adversary persistence behind during recovery.",
+          "Give the Board recommendations that map to the controls that failed."
+        ]
       },
       "nist_phases": [
         "Preparation",
@@ -70,6 +77,11 @@
           "phase_index": 1,
           "title": "Credential Harvested",
           "story": "Accounts Payable employee Margaret Chen clicked a Medicare-update link and entered her AD credentials on cms-medicare-billing[.]net before calling the helpdesk. Proxy logs show a 47-second connection. The domain passed SPF checks. What do you do?",
+          "story_variants": {
+            "optimal": "Your Sigma rule fires within minutes: Accounts Payable employee Margaret Chen clicked a Medicare-update link and entered her AD credentials on cms-medicare-billing[.]net. Because department heads were briefed, she calls the helpdesk immediately. Proxy logs show a 47-second connection. The domain passed SPF checks. What do you do?",
+            "neutral": "The tightened filters quarantined 400 legitimate emails overnight \u2014 and still let the lure through. Accounts Payable employee Margaret Chen clicked a Medicare-update link and entered her AD credentials on cms-medicare-billing[.]net. She only mentions it to the helpdesk two hours later while asking about a missing invoice. Proxy logs show a 47-second connection. The domain passed SPF checks. What do you do?",
+            "detrimental": "Nobody was watching for it. Accounts Payable employee Margaret Chen clicked a Medicare-update link and entered her AD credentials on cms-medicare-billing[.]net. The helpdesk only learns of it a day later, when her account starts triggering failed-logon alerts on a finance server. Proxy logs show a 47-second connection. The domain passed SPF checks. What do you do?"
+          },
           "mitre": {
             "tactic": "Initial Access",
             "tactic_id": "TA0001",
@@ -116,6 +128,11 @@
           "phase_index": 2,
           "title": "Ransomware Detonates",
           "story": "Despite partial containment, the attacker pre-deployed ransomware via GPO to 14 workstations. Files encrypted with .SHADOWCRYPT extension. Ransom note demands 45 BTC (~$2.7M). Tested backups from 3 days ago exist. CEO asks: should we pay?",
+          "story_variants": {
+            "optimal": "Your rapid lockout limited the attacker's window, but a GPO change pushed in the first hour was missed: ransomware detonates on 14 workstations. Files are encrypted with the .SHADOWCRYPT extension. The ransom note demands 45 BTC (~$2.7M). Tested backups from 3 days ago exist, and your evidence preservation means the intrusion timeline is intact. The CEO asks: should we pay?",
+            "neutral": "The password change did not end the session the attacker already held. Ransomware pushed via GPO detonates on 14 workstations and two file servers. Files are encrypted with the .SHADOWCRYPT extension. The ransom note demands 45 BTC (~$2.7M). Tested backups from 3 days ago exist. The CEO asks: should we pay?",
+            "detrimental": "Twenty-four hours of unhindered access was all it took. Ransomware deployed via GPO detonates across 14 workstations, the file servers, and the imaging archive. Files are encrypted with the .SHADOWCRYPT extension. The ransom note demands 45 BTC (~$2.7M) and claims patient records were taken first. Tested backups from 3 days ago exist. The CEO asks: should we pay?"
+          },
           "mitre": {
             "tactic": "Impact",
             "tactic_id": "TA0040",
@@ -162,6 +179,11 @@
           "phase_index": 3,
           "title": "Backdoor Discovered During Rebuild",
           "story": "During reimaging, EDR detects a scheduled task 'MicrosoftEdgeUpdateCore' on a server missed in the initial scope \u2014 running Base64-encoded PowerShell every 4 hours, beaconing to a Tor exit node. This server was not on the affected list.",
+          "story_variants": {
+            "optimal": "Recovery from backups is under way and the FBI has shared IOCs from other victims. During reimaging, EDR detects a scheduled task 'MicrosoftEdgeUpdateCore' on a server missed in the initial scope \u2014 running Base64-encoded PowerShell every 4 hours, beaconing to a Tor exit node. This server was not on the affected list.",
+            "neutral": "The partial payment bought a decryptor that works on roughly half the files; the rest are being restored from backup. During reimaging, EDR detects a scheduled task 'MicrosoftEdgeUpdateCore' on a server missed in the initial scope \u2014 running Base64-encoded PowerShell every 4 hours, beaconing to a Tor exit node. This server was not on the affected list.",
+            "detrimental": "The ransom was paid and kept quiet; the decryptor is slow and corrupts some files, so IT is quietly rebuilding anyway. During reimaging, EDR detects a scheduled task 'MicrosoftEdgeUpdateCore' on a server missed in the initial scope \u2014 running Base64-encoded PowerShell every 4 hours, beaconing to a Tor exit node. This server was not on the affected list, and no one has yet asked whether the payment was screened against sanctions lists."
+          },
           "mitre": {
             "tactic": "Persistence",
             "tactic_id": "TA0003",
@@ -208,6 +230,11 @@
           "phase_index": 4,
           "title": "Post-Incident Review",
           "story": "Three weeks post-incident. 47,000 PHI records confirmed exfiltrated. HHS OCR notification submitted. FBI investigation opened. Cyber insurance requires demonstrating reasonable controls. CISO needs PIR recommendations for the Board.",
+          "story_variants": {
+            "optimal": "Three weeks post-incident. The fleet-wide hunt found the scheduled task on two more servers; all were isolated and forensically imaged. 47,000 PHI records confirmed exfiltrated. HHS OCR notification submitted. FBI investigation opened. Cyber insurance requires demonstrating reasonable controls. The CISO needs PIR recommendations for the Board.",
+            "neutral": "Three weeks post-incident. The single server was reimaged, but a second beacon was found last week on a host nobody checked, and the investigation has reopened. 47,000 PHI records confirmed exfiltrated. HHS OCR notification submitted. FBI investigation opened. Cyber insurance requires demonstrating reasonable controls. The CISO needs PIR recommendations for the Board.",
+            "detrimental": "Three weeks post-incident. Recovery was declared complete \u2014 and the attacker returned through the 'false positive' scheduled task nine days later, forcing a second shutdown. 47,000 PHI records confirmed exfiltrated. HHS OCR notification submitted. FBI investigation opened. Cyber insurance is questioning coverage. The CISO needs PIR recommendations for the Board."
+          },
           "mitre": {
             "tactic": "Post-Incident",
             "tactic_id": "N/A",
