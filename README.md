@@ -1,7 +1,7 @@
 # 🛡️ Incident Response Tabletop Simulator
 
-> A modern, dark-themed Python GUI application for cybersecurity GRC training.
-> Maps attacker behaviors to **MITRE ATT&CK Enterprise v14**. Follows the **NIST SP 800-61 r2** lifecycle. Exports formatted GRC compliance reports.
+> A dark-themed Python GUI application for cybersecurity GRC training.
+> Maps attacker behaviors to **MITRE ATT&CK Enterprise v14**. Follows the **NIST SP 800-61 r2** lifecycle. Exports run-specific GRC compliance reports.
 
 ![Python](https://img.shields.io/badge/Python-3.9%2B-blue?style=flat-square&logo=python)
 ![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)
@@ -13,15 +13,17 @@
 
 ## ✨ Features
 
-- **20 fully detailed scenarios** — randomly selected at each launch for high replayability
-- **Shuffled answer choices** — option order randomized every inject; scoring always resolves to the correct quality regardless of display position
-- **Dark cyber-dashboard GUI** — built on Python `tkinter` (no Electron, no web server, no internet)
-- **MITRE ATT&CK mapped injects** — 51 unique technique IDs across 100 injects
-- **NIST SP 800-61 r2 lifecycle** — all 5 phases: Preparation → Detection → Containment → Eradication → Post-Incident
-- **Three-axis GRC scoring** — NIST IR Score, Regulatory Compliance Score, Legal Standing Score; all update live
-- **Markdown report export** — full post-incident GRC compliance report with executive recommendations, regulatory checklist, and MITRE technique coverage
-- **Data-code separation** — all scenario content in `scenarios.json`; zero Python changes needed to add scenarios
-- **Validator script** — `validate_scenarios.py` confirms any new scenario meets the required schema
+- **20 fully detailed scenarios** — 100 injects, 300 scored choices, 49 distinct ATT&CK technique IDs
+- **Briefing → injects → debrief flow** — every run opens with a briefing (role, objectives, threat profile) and ends with a structured debrief screen
+- **Branching narrative** — injects can carry `story_variants` so the next inject reflects the quality of your last decision (authored for *Operation Midnight Cipher*; the schema is open for the rest)
+- **Technique identification challenge** — after each decision you are asked to pick the ATT&CK technique in play from three candidates; identification is scored independently from the response
+- **Relative scoring that never saturates** — each axis is normalised against the best and worst achievable path, so the fifth inject matters as much as the first
+- **Post-commit reveal** — see the quality, score impact, and assessment of *all three* options, not just the one you chose
+- **Trainer tools** — facilitator mode (scores and ratings hidden until debrief), per-inject discussion timer, role prompts (IR lead / legal / comms / executive), save & resume, scenario picker with industry and severity filters
+- **Run-specific GRC report** — recommendations derived from the techniques you met and the decisions you missed; regulatory checklist scoped to the industry with an *exercise indication* per obligation; rendered in-app with copy and save
+- **Keyboard driven** — `1`–`3` / `A`–`C` select, `Enter` commits and advances
+- **Pure standard library** — tkinter only; no Electron, no web server, no internet
+- **Data-code separation** — all scenario content in `scenarios.json`; `validate_scenarios.py` checks schema, scoring, and shuffle stability
 
 ---
 
@@ -29,18 +31,14 @@
 
 ### Prerequisites
 - Python **3.9+**
-- `tkinter` — included in the Python standard library
+- `tkinter` — included in the Python standard library (Debian/Ubuntu: `sudo apt install python3-tk`)
 
 ```bash
-# 1. Clone
 git clone https://github.com/errmorra/IR_Sim.git
 cd IR_Sim
-
-# 2. Run — a random scenario is selected automatically (no pip installs needed)
-python app.py
+python app.py                      # random scenario, opens on the briefing screen
+python app.py --scenarios my.json  # or point at another scenario file ($IR_SIM_SCENARIOS also works)
 ```
-
-> On Debian/Ubuntu, install tkinter first if missing: `sudo apt install python3-tk`
 
 No database, no API keys, no server, no Docker.
 
@@ -50,18 +48,18 @@ No database, no API keys, no server, no Docker.
 
 | Step | Action |
 |------|--------|
-| 1 | Read the inject — a scenario event describing what your security team discovered |
-| 2 | Review the MITRE ATT&CK badge showing the adversary technique in play |
-| 3 | Select a response action — order is randomized each time |
-| 4 | Click **COMMIT DECISION** |
-| 5 | Read the GRC feedback with regulatory citations |
-| 6 | Monitor live scores, the MITRE tracker, and the exercise timer |
-| 7 | At the end, click **GENERATE GRC REPORT** to preview the report in-app and save it as Markdown |
-| 8 | Click **↻ RANDOM** for a fresh random scenario, or **▤ CHOOSE…** to pick a specific one |
+| 1 | Read the **briefing** — role, objectives, threat actor, severity — and press **Begin Exercise** |
+| 2 | Read the inject. Open **Discussion prompts by role** if you are running it as a group |
+| 3 | Select a response (order is shuffled every time) and **Commit Decision** |
+| 4 | Read the assessment, score impact, and what the other two options would have done |
+| 5 | **Identify the adversary technique** from three ATT&CK candidates — then the MITRE mapping is revealed |
+| 6 | Watch the live meters, the ATT&CK tracker, and the decision log in the sidebar |
+| 7 | At the **debrief**, review grade, phase efficiency, and every decision, then **Generate GRC Report** |
+| 8 | Replay, pick a random scenario, or **Choose…** a specific one (filter by industry or severity) |
 
-**Keyboard shortcuts:** press `1`–`3` (or `A`–`C`) to select a response, and `Enter` to commit your decision / advance to the next inject.
+**Trainer menu:** Facilitator Mode hides scores, ratings, and feedback until the debrief. Discussion Timer sets a per-inject countdown shown in the status bar. **File menu:** Save Progress / Resume Saved Progress (`.irsim.json`).
 
-Each launch picks a different scenario at random — play through all 20 for full coverage.
+**Keyboard shortcuts:** `1`–`3` or `A`–`C` select · `Enter` begin / commit / advance / open report · `Ctrl+S` save · `Ctrl+O` resume · `Ctrl+N` random scenario · `Ctrl+L` choose scenario · `Ctrl+R` report · `Ctrl+Q` quit.
 
 ---
 
@@ -69,17 +67,16 @@ Each launch picks a different scenario at random — play through all 20 for ful
 
 ```
 IR_Sim/
-├── app.py                    # Main GUI — all UI, session state, report export
-├── scenarios.json            # 20 scenarios, 100 injects, 300 choices, 51 MITRE IDs
+├── app.py                    # GUI, session state, report generator
+├── scoring.py                # Scoring model shared by the app, validator, and tests
+├── scenarios.json            # 20 scenarios, 100 injects, 300 choices
 ├── validate_scenarios.py     # Headless schema + scoring validator (for contributors)
-├── requirements.txt          # Optional dependencies
+├── tests/                    # unittest suite: scoring, session/report, GUI smoke (Xvfb)
+├── requirements.txt          # No third-party dependencies
 ├── CONTRIBUTING.md           # Scenario schema, PR process, accuracy standards
 ├── CHANGELOG.md              # Version history
 ├── LICENSE                   # MIT
-├── .gitignore
-└── .github/
-    └── workflows/
-        └── ci.yml            # GitHub Actions — syntax, JSON validation, logic tests
+└── .github/workflows/ci.yml  # Lint, validate, unit tests, headless GUI smoke test
 ```
 
 ---
@@ -113,76 +110,96 @@ IR_Sim/
 
 ## 🧠 Architecture
 
-Four clean classes, fully separated by concern:
-
 ```
-ScenarioManager       →  loads scenarios.json, randomly selects one at startup
-SimulationSession     →  runtime state: scores, decision log, MITRE technique tracking
-ReportGenerator       →  stateless Markdown report builder (reads from session)
-IncidentSimulatorApp  →  all tkinter GUI: dashboard, sidebar, meters, buttons
+scoring.py            →  pure scoring functions (bounds, normalisation, grades, phase efficiency)
+ScenarioManager       →  loads scenarios.json, mounts a scenario, resolves branching story variants,
+                         exposes the ATT&CK technique pool for identification distractors
+SimulationSession     →  runtime state: raw deltas, decision log, technique identifications,
+                         save/resume serialisation
+ReportGenerator       →  Markdown report built from the session (technique-driven recommendations,
+                         industry- and run-scoped obligations)
+IncidentSimulatorApp  →  tkinter GUI: briefing / inject / debrief views, sidebar, menus, dialogs
 ```
 
-### Randomization Design
+### Randomization
 
-**Scenario selection** — `random.randrange(len(all_scenarios))` is called once in `ScenarioManager.__init__`. The window title and header show `Scenario N/20: Title` so the player knows which one they got.
+**Scenario selection** — a random scenario is mounted at launch; `↻ Random` avoids an immediate repeat.
 
-**Choice shuffling** — `_load_inject()` shuffles a *copy* of the choices list on each inject display. Each button is assigned a scoped token `f"{inject_index}_{display_letter}"` as its radio button value. `_choice_token_map` resolves the token back to the original choice dict in `_on_submit()` — so scoring is always tied to `quality` + `text`, never to the A/B/C display position.
+**Choice shuffling** — each inject shuffles a *copy* of its choices. Each row is assigned a scoped token `f"{inject_index}_{letter}"` that resolves back to the original choice dict at commit time, so scoring is tied to the choice's quality and deltas, never to its display position.
 
-### Adding New Scenarios
+**Technique distractors** — the identification challenge draws two distractors from the technique pool of the whole scenario file, preferring one from the same tactic.
 
-Edit `scenarios.json` only — no Python changes required. Then validate:
+### Branching narrative
+
+An inject may carry a `story_variants` object keyed by the quality of the *previous* decision:
+
+```json
+"story": "Base narrative shown when no variant applies…",
+"story_variants": {
+  "optimal":     "Your Sigma rule fires within minutes…",
+  "neutral":     "The tightened filters quarantined 400 legitimate emails — and still let the lure through…",
+  "detrimental": "Nobody was watching for it…"
+}
+```
+
+The choices and their scores do not change, so scoring bounds stay stable while the story reacts to the player.
+
+### Adding new scenarios
+
+Edit `scenarios.json` only, then run:
 
 ```bash
-python validate_scenarios.py
+python validate_scenarios.py          # schema, scoring model, shuffle stability
+python -m unittest discover tests     # full test suite (GUI test skips without a display)
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the full inject schema and score delta guidelines.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the schema and score guidelines.
 
 ---
 
 ## 📊 Scoring System
 
-Three independent scores start at **50/100** and shift based on decision quality:
+Each choice carries three deltas: **NIST IR**, **Compliance**, **Legal**. A run's raw axis score is the sum of committed deltas, normalised against the worst and best sums achievable over the injects played so far:
+
+\[ \text{score} = \frac{\text{raw} - \text{worst}}{\text{best} - \text{worst}} \times 100 \]
+
+So **100** means "the strongest option at every inject" and **0** means "the weakest at every inject". Because it is relative, no decision is ever wasted to a clamp: the last inject can still change the grade.
 
 | Metric | What It Measures |
 |--------|-----------------|
 | **NIST IR Score** | Technical IR decision quality per NIST SP 800-61 r2 |
 | **Compliance Score** | Adherence to HIPAA, GDPR, PCI DSS, GLBA, NIST CSF, and other applicable frameworks |
 | **Legal Standing** | Decisions that protect or expose the organization to regulatory and legal liability |
+| **Technique identification** | Reported separately: correct ATT&CK picks / techniques challenged |
 
-**Grade scale:** A (≥85) · B (≥70) · C (≥55) · D (≥40) · F (<40)
+**Grade scale:** A (≥85) · B (≥70) · C (≥55) · D (≥30) · F (<30). An all-optimal run is an A, an all-neutral ("partial") run is a D, an all-detrimental run is an F, in every scenario — the validator enforces this.
 
 ---
 
 ## 📄 Generated Report Includes
 
-- Executive summary with overall grade and composite score
-- GRC metrics table with per-dimension ratings
-- NIST phase efficiency breakdown
-- Full decision timeline — every inject, your choice, quality rating, feedback, and MITRE context
-- MITRE ATT&CK checklist — all techniques encountered, identified vs. missed
-- 7 prioritized executive remediation recommendations mapped to NIST CSF 2.0, CIS Controls v8, HIPAA, DISA STIG
-- Regulatory obligations checklist — HIPAA OCR, OFAC, CIRCIA, FBI IC3, GLBA, GDPR, state breach laws
-- Report certification block suitable for portfolio and audit documentation
+- Executive summary with grade, composite score, decision quality counts, and identification rate
+- GRC metrics table and NIST phase efficiency breakdown
+- Full decision timeline — action taken, assessment, the alternatives not taken, ATT&CK context, and whether the technique was identified
+- MITRE ATT&CK checklist and framework references exercised
+- Executive recommendations mapped to NIST CSF 2.0, NIST SP 800-53, CIS Controls v8 and sector guidance — chosen from the techniques encountered, escalated where the response or identification fell short, plus a "revisit playbook" item for every non-optimal decision
+- Regulatory obligations checklist scoped to the scenario's industry and techniques, with an *exercise indication* (addressed / partially addressed / at risk / not exercised) inferred from the run
+- Certification block suitable for portfolio and audit documentation
 
 ---
 
 ## ⚖️ Regulatory Frameworks Referenced
 
-NIST SP 800-61 r2 · MITRE ATT&CK Enterprise v14 · HIPAA Security Rule · NIST CSF 2.0 · NIST SP 800-53 r5 · NIST SP 800-161r1 · GDPR · CCPA · PCI DSS v4 · GLBA Safeguards Rule · OFAC Sanctions · CIRCIA 2022 · DFARS 252.204-7012 · CMMC Level 2 · AWIA 2018 · FFIEC Authentication Guidance · NIST AI RMF 1.0 · SEC Cybersecurity Disclosure Rules (2023) · FinCEN SAR Requirements · CIS Controls v8 · ISO/IEC 27001:2022
+NIST SP 800-61 r2 · MITRE ATT&CK Enterprise v14 · HIPAA Security Rule · NIST CSF 2.0 · NIST SP 800-53 r5 · NIST SP 800-161r1 · NIST SP 800-190 · NIST SP 800-207 · GDPR · CCPA · PCI DSS v4 · GLBA Safeguards Rule · OFAC Sanctions · CIRCIA 2022 · DFARS 252.204-7012 · CMMC Level 2 · FFIEC Authentication Guidance · SEC Cybersecurity Disclosure Rules (2023) · FinCEN SAR Requirements · CIS Controls v8 · ISO/IEC 27001:2022
 
 ---
 
 ## 🤝 Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). Scenario PRs especially welcome — see the roster above for themes still uncovered.
+See [CONTRIBUTING.md](CONTRIBUTING.md). Scenario PRs especially welcome — and `story_variants` for the existing 19 scenarios that do not yet branch.
 
 ---
 
 ## 📜 License
 
 MIT — see [LICENSE](LICENSE)
-
----
-
-*Framework references: NIST SP 800-61 r2 · MITRE ATT&CK Enterprise v14 · NIST CSF 2.0*

@@ -1,21 +1,23 @@
 from setuptools import setup
 from pathlib import Path
 
-long_description = (Path(__file__).parent / "README.md").read_text(encoding="utf-8")
+here = Path(__file__).parent
+long_description = (here / "README.md").read_text(encoding="utf-8")
 
 setup(
     name="IR_Sim",
-    version="3.2.0",
+    version="4.0.0",
     author="errmorra",
     description="MITRE ATT&CK-mapped Incident Response Tabletop Simulator — 20 scenarios, GRC report export",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/errmorra/IR_Sim",
-    py_modules=["app"],
+    py_modules=["app", "scoring"],
     python_requires=">=3.9",
     entry_points={"console_scripts": ["ir_sim=app:main"]},
-    package_data={"": ["scenarios.json"]},
-    include_package_data=True,
+    # Installed to <prefix>/share/ir_sim/scenarios.json; app.py searches that path
+    # after the script directory, the working directory and $IR_SIM_SCENARIOS.
+    data_files=[("share/ir_sim", ["scenarios.json"])],
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",

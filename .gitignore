@@ -18,8 +18,10 @@ dist/
 *.egg-info/
 *.egg
 
-# Generated GRC reports (user outputs — don't commit)
+# Generated GRC reports and saved exercise progress (user outputs — don't commit)
 IR_GRC_Report_*.md
+IR_Sim_progress_*.json
+*.irsim.json
 
 # OS artifacts
 .DS_Store
